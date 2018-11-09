@@ -74,6 +74,8 @@ def get_a_links(response, start_url):
         match = [x for x in match if not x.startswith('//')]
         # replace relative url with absolute
         match = [x if not x.startswith('/') else start_url+x for x in match]
+        # get outbound links
+        outbound_links = [x for x in match if not x.startswith(start_url)]
         # remove outbound links
         match = [x for x in match if x.startswith(start_url)]
         # remove duplicates
@@ -89,7 +91,7 @@ def get_a_links(response, start_url):
                     all_links.add(item)
             else:
                 all_links.add(x)
-        return [a_links, all_links]
+        return [a_links, all_links, outbound_links]
 
     except lxml.etree.ParserError:
         return False
@@ -117,13 +119,11 @@ def check_type(links_list):
     return list_urls
 
 
-def get_meta(text):
-    content_length = len(text)
+def get_meta(plain_html):
     h = html2text.HTML2Text()
     h.ignore_links = True
-    plain_text = h.handle(text)
-    text_length = len(plain_text)
-    text_obj = html.fromstring(text.lower())
+    plain_text = h.handle(plain_html)
+    text_obj = html.fromstring(plain_html.lower())
     try:
         title = text_obj.xpath('//title/text()')[0].strip()
     except Exception as e:
@@ -138,7 +138,7 @@ def get_meta(text):
         print(e)
         print(type(e))
         description = 'None'
-    return [title, description, content_length, text_length, plain_text]
+    return [title, description, plain_text, plain_html]
 
 
 async def html_handler(response):
@@ -149,10 +149,25 @@ async def html_handler(response):
             meta = get_meta(response_text)
             links = get_a_links(response_text, start_url)
             typized_all_links = check_type(links[1])
-            # async with create_engine(**connection) as engine:
-            #     async with engine.acquire() as conn:
-            #             await conn.execute(urls_table.insert().values(''))
+            async with create_engine(**connection) as engine:
+                async with engine.acquire() as conn:
+                        await conn.execute(urls_table.insert().values({'url': url,
+                                                                       'type': 'html',
+                                                                       'title': meta[0],
+                                                                       'description': meta[1],
+                                                                       'text': json.dumps(meta[2]),
+                                                                       'text_len': len(meta[2]),
+                                                                       'html': json.dumps(meta[3]),
+                                                                       'html_len': len(meta[3]),
+                                                                       'a_links_len': len(links[0]),
+                                                                       'links_inbound': list(links[0]),
+                                                                       'links_inbound_len': len(links[0]),
+                                                                       'links_outbound': list(links[2]),
+                                                                       'links_outbound_len': len(links[2]),
+                                                                       'all_links': list(links[1]),
+                                                                       'all_links_len': len(links[1])}))
             await write_binary(response, url, 'index.html')
+            pprint(typized_all_links)
         elif response.status in [500, 502]:
             await qu.put([str(response.url), 'html'])
         else:
@@ -165,7 +180,7 @@ async def html_handler(response):
         print('ValueError', response.url)
         print(response)
     except Exception as e:
-        print(type(e))
+        print(e)
 
 
 async def main():
@@ -188,7 +203,7 @@ async def main():
     #
     # await asyncio.gather(*tasks)
 
+if __name__ =='__main__':
+    asyncio.run(main())
+    print("--- %s seconds ---" % (time.time() - start_time))
 
-asyncio.run(main())
-
-print("--- %s seconds ---" % (time.time() - start_time))
