@@ -12,6 +12,7 @@ import html2text
 from pprint import pprint
 from aiopg.sa import create_engine
 from db import connection, domains_table, urls_table
+# from html_handler import html_handler
 
 from settings import auth_login, auth_password, ssl, start_url, domain
 
@@ -48,13 +49,15 @@ qu = asyncio.Queue()
 
 
 async def write_binary(response, url, ext=''):
-    uri = urlparse(unquote(url))
-    path = uri.path + ext
-    directory = os.path.dirname(path)
+    # creating path from host and path
+    path = url.host+url.path
+    # removing filename
+    directory = path.split('/')[:-1]
+    directory = '/'.join(directory)
     if not os.path.exists(directory):
         os.makedirs(directory)
     try:
-        async with aiofiles.open(path, mode='wb') as f:
+        async with aiofiles.open(path+ext, mode='wb') as f:
             await f.write(await response.read())
             await f.close()
     except OSError:
@@ -97,25 +100,27 @@ def get_a_links(response, start_url):
         return False
 
 
-def check_type(links_list):
-    condition_list = ['?', '#', 'trackback']
-    list_urls = list()
-    for link in links_list:
+def check_type(links_dict):
+    condition_list = ['#', 'trackback']
+    list_urls = dict()
+    for link, source in links_dict.items():
         link = unquote(link)
         if link.endswith(('.jpg', '.png', '.jpeg', '.exif', '.tiff', '.gif', '.bmp', '.ico')):
-            list_urls.append([link, 'img'])
+            list_urls[link] = ['img', source]
         elif '.js' in link:
-            list_urls.append([link, 'js'])
+            list_urls[link] = ['js', source]
         elif '.css' in link:
-            list_urls.append([link, 'css'])
+            list_urls[link] = ['css', source]
         elif '.xml' in link:
-            list_urls.append([link, 'xml'])
-        elif '.php' in link:
-            list_urls.append([link, 'php'])
+            list_urls[link] = ['xml', source]
+        elif link.endswith(('.ttf', '.woff', '.woff2', '.svg', '.eot')):
+            list_urls[link] = ['font', source]
+        elif '?' in link:
+            list_urls[link] = ['parametrized', source]
         elif any(word in link for word in condition_list):
-            list_urls.append([link, 'shitty'])
+            list_urls[link] = ['shitty', source]
         else:
-            list_urls.append([link, 'html'])
+            list_urls[link] = ['html', source]
     return list_urls
 
 
@@ -139,48 +144,6 @@ def get_meta(plain_html):
         print(type(e))
         description = 'None'
     return [title, description, plain_text, plain_html]
-
-
-async def html_handler(response):
-    try:
-        if response.status == 200:
-            url = str(response.url)
-            response_text = await response.text()
-            meta = get_meta(response_text)
-            links = get_a_links(response_text, start_url)
-            typized_all_links = check_type(links[1])
-            async with create_engine(**connection) as engine:
-                async with engine.acquire() as conn:
-                        await conn.execute(urls_table.insert().values({'url': url,
-                                                                       'type': 'html',
-                                                                       'title': meta[0],
-                                                                       'description': meta[1],
-                                                                       'text': json.dumps(meta[2]),
-                                                                       'text_len': len(meta[2]),
-                                                                       'html': json.dumps(meta[3]),
-                                                                       'html_len': len(meta[3]),
-                                                                       'a_links_len': len(links[0]),
-                                                                       'links_inbound': list(links[0]),
-                                                                       'links_inbound_len': len(links[0]),
-                                                                       'links_outbound': list(links[2]),
-                                                                       'links_outbound_len': len(links[2]),
-                                                                       'all_links': list(links[1]),
-                                                                       'all_links_len': len(links[1])}))
-            await write_binary(response, url, 'index.html')
-            pprint(typized_all_links)
-        elif response.status in [500, 502]:
-            await qu.put([str(response.url), 'html'])
-        else:
-            bad_urls[str(response.url)] = response.status
-    except ValueError:
-        bad_urls[str(response.url)] = 'ValueError'
-    except TypeError:
-        bad_urls[str(response.url)] = 'TypeError'
-    except AttributeError:
-        print('ValueError', response.url)
-        print(response)
-    except Exception as e:
-        print(e)
 
 
 async def main():
