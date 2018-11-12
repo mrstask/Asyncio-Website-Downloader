@@ -6,7 +6,7 @@ from urllib.parse import unquote
 from pprint import pprint
 import json
 
-link = ['http://megamillions.com.ua/wp-content/plugins/wp-minify/min/?f=wp-content/plugins/so-widgets-bundle/widgets/button/css/style.css', 'css']
+link = ['http://megamillions.com.ua/wp-content/plugins/so-widgets-bundle/widgets/button/css/style.css', 'css']
 
 
 async def worker(url):
