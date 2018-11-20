@@ -66,8 +66,10 @@ class HtmlHandler(CssHandler):
                 self.new_link = self.rm_dot_in_link()
             if self.new_link.startswith('.'):
                 self.startsw_dot()
+                self.dict_to_type()
             elif self.new_link.startswith('/'):
                 self.startsw_slash()
+                self.dict_to_type()
             elif self.new_link.startswith('http'):
                 self.dict_to_type()
             else:
