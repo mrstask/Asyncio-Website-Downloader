@@ -1,12 +1,11 @@
 import aiohttp
 import asyncio
 import re
-from main import write_binary, check_type, start_url, connection, create_engine, urls_table
-from urllib.parse import unquote
 from pprint import pprint
+from urllib.parse import unquote
 from css_handler_class import CssHandler
-import json
-from lxml import html
+from lxml import html as lhtml
+import html
 
 start_link = ['http://megamillions.com.ua/', 'html']
 
@@ -14,50 +13,73 @@ start_link = ['http://megamillions.com.ua/', 'html']
 class HtmlHandler(CssHandler):
     def find_a_links(self):
         try:
-            links = html.fromstring(self.response_text)
-            a_links = links.xpath('//a/@href')
-            for link in a_links:
-                if link.startswith('/'):
-                    print(self.url.parent + link)
-                elif link.startswith(str(self.url.parent)):
-                    self.inbound[link] = link
-                else:
-                    self.outbound[link] = link
+            a_links = lhtml.fromstring(self.response_text)
+            a_links = a_links.xpath('//a/@href')
+            [self.links.add(link) for link in a_links]
         except Exception as e:
-            print(type(e))
+            print('find_a_links', type(e))
 
     def find_lookalike_links(self):
         match = re.findall(r'=[\'\"]?((http|/)[^\'\" >]+)', self.response_text)
-        match = [x[0] for x in match]
-        # pprint(match)
+        [self.links.add(x[0]) for x in match]
 
     def find_srcset(self):
         match = re.findall(r'srcset=[\'\"]?((http|/)[^\'\">]+)', self.response_text)
         for m in match:
             for item in m:
                 if self.url.host in item:
-                    print(item)
+                    if ','in item:
+                        item = item.split(',')
+                        for img_url in item:
+                            self.links.add(img_url.strip().split(' ')[0])
+                    # may cause errors
+                    else:
+                        self.links.add(item.strip().split(' ')[0])
+                        print('find_srcset_else_item', item)
+
+
 
     def iterator(self):
-        for self.link in self.links:
-            self.prepare_n_rm()
+        listation = list(self.links)
+        for self.link in listation:
+            # will remove hash or & parameters and create new_link
+            self.new_link = html.unescape(unquote(self.link))
+            if self.new_link.startswith('\\\\'):
+                self.rm_backslash()
+            if self.new_link.startswith('//'):
+                self.startsw_double_slash()
+            if '#' in self.new_link:
+                self.rm_hash()
             if '?f=' in self.new_link:
-                self.new_link = self.link_parameter_f()
+                result = self.rm_parameter_f()
+                if isinstance(result, set):
+                    new_link_is_set = False
+                    for link in result:
+                        if link not in listation and new_link_is_set == False:
+                            self.new_link = link
+                            new_link_is_set = True
+                        else:
+                            listation.append(link)
+                else:
+                    self.new_link = result
+            if '..' in self.new_link:
+                self.new_link = self.rm_dot_in_link()
             if self.new_link.startswith('.'):
-                self.link_dot()
+                self.startsw_dot()
             elif self.new_link.startswith('/'):
-                self.link_slash()
+                self.startsw_slash()
             elif self.new_link.startswith('http'):
-                self.link_http()
+                self.dict_to_type()
             else:
-                self.link_other()
-        self.inbound = check_type(self.inbound)
+                self.starsw_other()
+                self.dict_to_type()
+
+        # self.inbound = check_type(self.inbound)
 
 
 async def worker(url):
     async with aiohttp.ClientSession() as session:
         async with session.get(url[0]) as response:
-            print(url[0])
             if url[1] == 'html':
                 html = HtmlHandler()
                 if await html.request_handler(response):
@@ -65,6 +87,12 @@ async def worker(url):
                     html.find_css_links()
                     html.find_lookalike_links()
                     html.find_srcset()
+                    html.iterator()
+                    # pprint(html.links)
+                    print('****outbound****')
+                    pprint(html.outbound)
+                    print('****inbound****')
+                    pprint(html.inbound)
 
                     # print(html.links)
                 # html.iterator()

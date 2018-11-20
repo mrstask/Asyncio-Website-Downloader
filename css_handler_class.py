@@ -12,7 +12,8 @@ start_link = ['http://megamillions.com.ua/wp-content/themes/maskitto-light/css/s
 class CssHandler(BaseHandler):
     def find_css_links(self):
         # lets find all urls in url tags
-        self.links = re.findall(r"url\((.*?)\)", self.response_text)
+        css_links = re.findall(r"url\((.*?)\)", self.response_text)
+        [self.links.add(x) for x in css_links]
 
     def data_to_db(self):
         return {'url': str(self.url),

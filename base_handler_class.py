@@ -4,7 +4,8 @@ import aiofiles
 import json
 from db import connection, urls_table
 from aiopg.sa import create_engine
-from urllib.parse import unquote
+from urllib.parse import unquote, urljoin
+
 
 class BaseHandler:
     def __init__(self):
@@ -12,7 +13,7 @@ class BaseHandler:
         self.outbound = dict()
         self.response_text = object()
         self.response_object = object()
-        self.links = list()
+        self.links = set()
         self.url = object()
         self.link = str()
         self.new_link = str()
@@ -41,20 +42,37 @@ class BaseHandler:
                 await f.close()
         except OSError:
             print('OSError')
+# removing stuff
 
-    def prepare_n_rm(self):
-        self.new_link = unquote(self.link)
+    def rm_backslash(self):
         self.new_link = self.new_link.replace('\\', '')
-        if '&' in self.new_link or '#' in self.new_link:
-            for entity in ['&', '#']:
-                if entity in self.new_link:
-                    self.new_link = self.new_link.split(entity)[0]
 
-    def link_parameter_f(self):
-        self.new_link = self.new_link.split('?f=')[1:]
-        return self.url.with_path(self.new_link)
+    def rm_hash(self):
+        if '?#' in self.new_link:
+            self.new_link = self.new_link.split('?#')[0]
+        else:
+            self.new_link = self.new_link.split('#')[0]
 
-    def link_dot(self):
+    def rm_parameter_f(self):
+        # print('rm_parameter_f', self.new_link)
+        occurancies = self.new_link.split('?f=')
+        if ',' in occurancies[1]:
+            occurances = set(occurancies[1].split(','))
+            new_occurances = set()
+            for item in occurances:
+                new_occurances.add(str(self.url.with_path(item)))
+            return new_occurances
+        else:
+             return self.new_link[1]
+
+    def rm_dot_in_link(self):
+        path = urljoin(self.new_link, '.')
+        filename = self.new_link.split('/')[-1]
+        return path +''.join(filename)
+
+        # startswith stuff
+
+    def startsw_dot(self):
         # count steps back in response url to find absolute path for url by counting dots in url
         steps_back = self.new_link.split('/')[0].count('.')
         # making steps back from current path
@@ -62,31 +80,34 @@ class BaseHandler:
         # joining url back without first slash
         path = '/'.join(path[1:])
         # getting absolute url together
-        self.inbound[(str(self.url.with_path(path + self.new_link[steps_back:])))] = self.link
+        self.new_link = str(self.url.with_path(path + self.new_link[steps_back:]))
 
-    def link_slash(self):
+    def startsw_slash(self):
         # if link is relative and in the same folder that url is, make that link absolute
-        self.inbound[self.url.with_path(self.new_link[1:])] = self.link
+        self.new_link = str(self.url.with_path(self.new_link[1:]))
 
-    def link_http(self):
+    def startsw_double_slash(self):
+        self.new_link = 'http:' + self.new_link
+
+    def dict_to_type(self):
         if self.url.host in self.new_link:
             self.inbound[self.new_link] = self.link
         else:
-            self.outbound.add(self.link)
+            self.outbound[self.new_link] = self.link
 
-    def link_other(self):
+    def starsw_other(self):
             # find links in all wierd occurencies
             match = re.findall(r'=[\'\"]?((http|/)[^\'\" >]+)', self.new_link)
             # great possibility of error generation
             if not match:
                 if '?' in self.new_link:
                     self.new_link = self.new_link.split('?')[:-1][0]
-                self.inbound[str(self.url.parent) + '/' + self.new_link] = self.link
+                self.new_link = str(self.url.parent) + '/' + self.new_link
             if match:
                 for item in match[0]:
                     if not item.startswith(str(self.url.parent)):
                         if '/' in item:
-                            self.outbound[item] = self.link
+                            self.new_link = item
 
     async def write_db(self, values):
         async with create_engine(**connection) as engine:
