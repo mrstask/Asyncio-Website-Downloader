@@ -1,10 +1,9 @@
 import os
 import re
 import aiofiles
-import json
 from db import connection, urls_table
 from aiopg.sa import create_engine
-from urllib.parse import unquote, urljoin
+from urllib.parse import urljoin
 
 
 class BaseHandler:
@@ -70,6 +69,23 @@ class BaseHandler:
         filename = self.new_link.split('/')[-1]
         return path +''.join(filename)
 
+    def rm_n_in_link(self):
+        return self.new_link.replace('\n', '')
+
+    def rm_wierd_stuff_in_link(self):
+        if '\'' in self.new_link:
+            new_link = self.new_link.split('\'')[0]
+        elif '\"' in self.new_link:
+            new_link = self.new_link.split('\"')[0]
+        elif '*' in self.new_link:
+            new_link = self.new_link.split('*')[0]
+        else:
+            new_link = self.new_link.split(')')[0]
+        return new_link
+
+    def rm_unescaped_in_link(self):
+        return self.new_link.replace('\/', '/')
+
         # startswith stuff
 
     def startsw_dot(self):
@@ -90,6 +106,8 @@ class BaseHandler:
         self.new_link = 'http:' + self.new_link
 
     def dict_to_type(self):
+        if os.linesep in self.link:
+            self.link = self.link.split(os.linesep)[0]
         if self.url.host in self.new_link:
             self.inbound[self.new_link] = self.link
         else:

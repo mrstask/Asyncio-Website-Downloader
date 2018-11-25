@@ -4,14 +4,15 @@ import re
 from pprint import pprint
 from urllib.parse import unquote
 from css_handler_class import CssHandler
+from js_handler import JsHandler
 from lxml import html as lhtml
 import html
 
 start_link = ['http://megamillions.com.ua/', 'html']
 
 
-class HtmlHandler(CssHandler):
-    def find_a_links(self):
+class HtmlHandler(CssHandler, JsHandler):
+    def html_find_a_links(self):
         try:
             a_links = lhtml.fromstring(self.response_text)
             a_links = a_links.xpath('//a/@href')
@@ -19,11 +20,11 @@ class HtmlHandler(CssHandler):
         except Exception as e:
             print('find_a_links', type(e))
 
-    def find_lookalike_links(self):
+    def html_find_lookalike_links(self):
         match = re.findall(r'=[\'\"]?((http|/)[^\'\" >]+)', self.response_text)
         [self.links.add(x[0]) for x in match]
 
-    def find_srcset(self):
+    def html_find_srcset(self):
         match = re.findall(r'srcset=[\'\"]?((http|/)[^\'\">]+)', self.response_text)
         for m in match:
             for item in m:
@@ -37,12 +38,9 @@ class HtmlHandler(CssHandler):
                         self.links.add(item.strip().split(' ')[0])
                         print('find_srcset_else_item', item)
 
-
-
-    def iterator(self):
+    def html_iterator(self):
         listation = list(self.links)
         for self.link in listation:
-            # will remove hash or & parameters and create new_link
             self.new_link = html.unescape(unquote(self.link))
             if self.new_link.startswith('\\\\'):
                 self.rm_backslash()
@@ -83,23 +81,33 @@ async def worker(url):
     async with aiohttp.ClientSession() as session:
         async with session.get(url[0]) as response:
             if url[1] == 'html':
-                html = HtmlHandler()
-                if await html.request_handler(response):
-                    html.find_a_links()
-                    html.find_css_links()
-                    html.find_lookalike_links()
-                    html.find_srcset()
-                    html.iterator()
+                html_instance = HtmlHandler()
+                if await html_instance.request_handler(response):
+                    html_instance.html_find_a_links()
+                    html_instance.html_find_lookalike_links()
+                    html_instance.html_find_srcset()
+                    html_instance.html_iterator()
+                    print('html_inbound', len(html_instance.inbound))
+                    print('html_outbound', len(html_instance.outbound))
+                    # css parser
+                    html_instance.css_find_links()
+                    html_instance.css_iterator()
+                    print('css_inbound', len(html_instance.inbound))
+                    print('css_outbound', len(html_instance.outbound))
+                    # js parser
+                    html_instance.js_find_sw_bracket_links()
+                    html_instance.js_find_sw_colon_links()
+                    html_instance.js_find_sw_equal_links()
+                    html_instance.js_find_sw_space_links()
+                    html_instance.js_iterator()
+                    print('js_inbound', len(html_instance.inbound))
+                    print('js_outbound', len(html_instance.outbound))
                     # pprint(html.links)
                     print('****outbound****')
-                    pprint(html.outbound)
+                    pprint(html_instance.outbound)
                     print('****inbound****')
-                    pprint(html.inbound)
+                    pprint(html_instance.inbound)
 
-                    # print(html.links)
-                # html.iterator()
-                # css.link_outbound_rm()
-                # await css.write_db()
 
 
 

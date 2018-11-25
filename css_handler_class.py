@@ -1,7 +1,7 @@
 import aiohttp
 import asyncio
 import re
-from main import check_type, start_url, connection, create_engine, urls_table
+from main import check_type
 from pprint import pprint
 import json
 from base_handler_class import BaseHandler
@@ -10,7 +10,7 @@ start_link = ['http://megamillions.com.ua/wp-content/themes/maskitto-light/css/s
 
 
 class CssHandler(BaseHandler):
-    def find_css_links(self):
+    def css_find_links(self):
         # lets find all urls in url tags
         css_links = re.findall(r"url\((.*?)\)", self.response_text)
         [self.links.add(x) for x in css_links]
@@ -30,19 +30,19 @@ class CssHandler(BaseHandler):
                 'links_outbound': json.dumps(self.outbound),
                 'links_outbound_len': len(self.outbound.keys())}
 
-    def iterator(self):
+    def css_iterator(self):
         for self.link in self.links:
-            self.prepare_n_rm()
+            self.rm_n_in_link()
             if '?f=' in self.new_link:
-                self.new_link = self.link_parameter_f()
+                self.new_link = self.rm_parameter_f()
             if self.new_link.startswith('.'):
-                self.link_dot()
+                self.startsw_dot()
             elif self.new_link.startswith('/'):
-                self.link_slash()
+                self.startsw_slash()
             elif self.new_link.startswith('http'):
-                self.link_http()
+                self.dict_to_type()
             else:
-                self.link_other()
+                self.starsw_other()
         self.inbound = check_type(self.inbound)
 
 
@@ -53,8 +53,8 @@ async def worker(url):
                 css = CssHandler()
                 if await css.request_handler(response):
                     await css.write_binary()
-                    css.find_css_links()
-                    css.iterator()
+                    css.css_find_links()
+                    css.css_iterator()
                     await css.write_db(css.data_to_db())
                     pprint(css.inbound)
                     pprint(css.outbound)

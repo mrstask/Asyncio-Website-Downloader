@@ -7,29 +7,19 @@ from urllib.parse import unquote
 from base_handler_class import BaseHandler
 
 
-start_link = ['http://megamillions.com.ua/wp-content/cache/autoptimize/js/autoptimize_0bda8df07439e32b5d7c6e29dc61b480.js','js']
+start_link = ['http://megamillions.com.ua/xmlrpc.php?rsd', 'xml']
 
 
-class JsHandler(BaseHandler):
-    def js_find_sw_equal_links(self):
+class XmlHandler(BaseHandler):
+    def xml_find_sw_equal_links(self):
         match = re.findall(r'=[\'\"]?((http|//)[^\'\" >]+)', self.response_text)
         [self.links.add(x[0]) for x in match]
 
-    def js_find_sw_colon_links(self):
-        match = re.findall(r':[\'\"]?((http|//)[^\'\" >]+)', self.response_text)
+    def xml_find_angual_links(self):
+        match = re.findall(r'>((http)[^ <]+)', self.response_text)
         [self.links.add(x[0]) for x in match]
 
-    def js_find_sw_space_links(self):
-        match = re.findall(r'\s[\'\"]?((http|//)[^\'\" >]+)', self.response_text)
-        [self.links.add(x[0]) for x in match]
-        match = re.findall(r'\s((http)[^\n >]+)', self.response_text)
-        [self.links.add(x[0]) for x in match]
-
-    def js_find_sw_bracket_links(self):
-        match = re.findall(r'\(((http|//)[^\)]+)', self.response_text)
-        [self.links.add(x[0]) for x in match]
-
-    def js_iterator(self):
+    def xml_iterator(self):
         listation = list(self.links)
         for self.link in listation:
             # will remove hash or & parameters and create new_link
@@ -76,19 +66,17 @@ class JsHandler(BaseHandler):
 async def worker(url):
     async with aiohttp.ClientSession() as session:
         async with session.get(url[0]) as response:
-            if url[1] == 'js':
-                js = JsHandler()
-                if await js.request_handler(response):
-                    js.find_sw_equal_links()
-                    js.find_sw_colon_links()
-                    js.find_sw_space_links()
-                    js.find_sw_bracket_links()
-                    js.js_iterator()
-                    # pprint(js.links)
+            if url[1] == 'xml':
+                xml_instance = XmlHandler()
+                if await xml_instance.request_handler(response):
+                    xml_instance.xml_find_sw_equal_links()
+                    xml_instance.xml_find_angual_links()
+                    xml_instance.xml_iterator()
+                    # pprint(xml_instance.links)
                     print('****outbound****')
-                    pprint(js.outbound)
+                    pprint(xml_instance.outbound)
                     print('****inbound****')
-                    pprint(js.inbound)
+                    pprint(xml_instance.inbound)
 
 if __name__ == '__main__':
     asyncio.run(worker(start_link))
