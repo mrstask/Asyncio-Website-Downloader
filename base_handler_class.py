@@ -3,7 +3,8 @@ import re
 import aiofiles
 from db import connection, urls_table
 from aiopg.sa import create_engine
-from urllib.parse import urljoin
+from urllib.parse import urljoin, unquote
+import html
 
 
 class BaseHandler:
@@ -30,6 +31,8 @@ class BaseHandler:
     async def write_binary(self, ext=''):
         # creating path from host and path
         path = self.url.host + self.url.path
+        print(self.url.path)
+        print(self.url.query_string)
         # removing filename
         directory = path.split('/')[:-1]
         directory = '/'.join(directory)
@@ -62,12 +65,12 @@ class BaseHandler:
                 new_occurances.add(str(self.url.with_path(item)))
             return new_occurances
         else:
-             return self.new_link[1]
+            return self.new_link[1]
 
     def rm_dot_in_link(self):
         path = urljoin(self.new_link, '.')
         filename = self.new_link.split('/')[-1]
-        return path +''.join(filename)
+        return path + '' .join(filename)
 
     def rm_n_in_link(self):
         return self.new_link.replace('\n', '')
@@ -126,6 +129,69 @@ class BaseHandler:
                     if not item.startswith(str(self.url.parent)):
                         if '/' in item:
                             self.new_link = item
+
+    def check_type(self, links_dict):
+        list_urls = dict()
+        for link, source in links_dict.items():
+            link = unquote(link)
+            if link.endswith(('.jpg', '.png', '.jpeg', '.exif', '.tiff', '.gif', '.bmp', '.ico')):
+                list_urls[link] = ['img', source]
+            elif '.js' in link:
+                list_urls[link] = ['js', source]
+            elif '.css' in link:
+                list_urls[link] = ['css', source]
+            elif '.xml' in link:
+                list_urls[link] = ['xml', source]
+            elif link.endswith(('.ttf', '.woff', '.woff2', '.svg', '.eot')):
+                list_urls[link] = ['font', source]
+            elif '?' in link:
+                list_urls[link] = ['parametrized', source]
+            else:
+                list_urls[link] = ['html', source]
+        return list_urls
+
+    def base_iterator(self):
+        listation = list(self.links)
+        for self.link in listation:
+            self.new_link = html.unescape(unquote(self.link))
+            if self.new_link.startswith('\\\\'):
+                self.rm_backslash()
+            if self.new_link.startswith('//'):
+                self.startsw_double_slash()
+            if '\/' in self.new_link:
+                self.new_link = self.rm_unescaped_in_link()
+            if '\n' in self.new_link:
+                self.new_link = self.rm_n_in_link()
+            if any(x in self.new_link for x in ['\'', '\"', '*', ')']):
+                self.new_link = self.rm_wierd_stuff_in_link()
+            if '#' in self.new_link:
+                self.rm_hash()
+            if '?f=' in self.new_link:
+                result = self.rm_parameter_f()
+                if isinstance(result, set):
+                    new_link_is_set = False
+                    for link in result:
+                        if link not in listation and new_link_is_set == False:
+                            self.new_link = link
+                            new_link_is_set = True
+                        else:
+                            listation.append(link)
+                else:
+                    self.new_link = result
+            if '..' in self.new_link:
+                self.new_link = self.rm_dot_in_link()
+            if self.new_link.startswith('.'):
+                self.startsw_dot()
+                self.dict_to_type()
+            elif self.new_link.startswith('/'):
+                self.startsw_slash()
+                self.dict_to_type()
+            elif self.new_link.startswith('http'):
+                self.dict_to_type()
+            else:
+                self.starsw_other()
+                self.dict_to_type()
+
 
     async def write_db(self, values):
         async with create_engine(**connection) as engine:

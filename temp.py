@@ -1,16 +1,8 @@
-import urllib.parse as ullp
-class Some:
-    def __init__(self):
-        self.link = 'http://megamillions.com.ua/wp-content/plugins/youtube-embed-plus/styles/../images/arrow-left.svg'
-        self.result_link = 'http://megamillions.com.ua/wp-content/plugins/youtube-embed-plus/images/arrow-left.svg'
+import asyncio
+import aiohttp
+async def worker(url):
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as response:
+            print(response.url.query_string)
 
-    def rm_dot_in_link(self):
-        path = ullp.urljoin('http://megamillions.com.ua/wp-content/plugins/youtube-embed-plus/styles/../images/arrow-left.svg', '.')
-        file = self.link.split('/')[-1]
-
-        print(path+''.join(file))
-
-
-some_test = Some()
-
-some_test.rm_dot_in_link()
+asyncio.run(worker('http://megamillions.com.ua/wp-json/oembed/1.0/embed?url=http://megamillions.com.ua/'))

@@ -1,12 +1,12 @@
 import aiohttp
 import asyncio
 import re
-from main import check_type
 from pprint import pprint
 import json
 from base_handler_class import BaseHandler
 
-start_link = ['http://megamillions.com.ua/wp-content/themes/maskitto-light/css/style.css', 'css']
+# start_link = ['http://megamillions.com.ua/', 'css']
+start_link = ['http://megamillions.com.ua/wp-content/plugins/waiting/css/style.css', 'css']
 
 
 class CssHandler(BaseHandler):
@@ -30,34 +30,20 @@ class CssHandler(BaseHandler):
                 'links_outbound': json.dumps(self.outbound),
                 'links_outbound_len': len(self.outbound.keys())}
 
-    def css_iterator(self):
-        for self.link in self.links:
-            self.rm_n_in_link()
-            if '?f=' in self.new_link:
-                self.new_link = self.rm_parameter_f()
-            if self.new_link.startswith('.'):
-                self.startsw_dot()
-            elif self.new_link.startswith('/'):
-                self.startsw_slash()
-            elif self.new_link.startswith('http'):
-                self.dict_to_type()
-            else:
-                self.starsw_other()
-        self.inbound = check_type(self.inbound)
-
 
 async def worker(url):
     async with aiohttp.ClientSession() as session:
         async with session.get(url[0]) as response:
             if url[1] == 'css':
-                css = CssHandler()
-                if await css.request_handler(response):
-                    await css.write_binary()
-                    css.css_find_links()
-                    css.css_iterator()
-                    await css.write_db(css.data_to_db())
-                    pprint(css.inbound)
-                    pprint(css.outbound)
+                css_instance = CssHandler()
+                if await css_instance.request_handler(response):
+                    await css_instance.write_binary()
+                    css_instance.css_find_links()
+                    css_instance.base_iterator()
+                    css_instance.inbound = css_instance.check_type(css_instance.inbound)
+                    # await css_instance.write_db(css_instance.data_to_db())
+                    pprint(css_instance.inbound)
+                    pprint(css_instance.outbound)
 
 
 if __name__ == '__main__':

@@ -2,11 +2,11 @@ import aiohttp
 import asyncio
 import re
 from pprint import pprint
-from urllib.parse import unquote
 from css_handler_class import CssHandler
 from js_handler import JsHandler
 from lxml import html as lhtml
 import html
+import html2text
 
 start_link = ['http://megamillions.com.ua/', 'html']
 
@@ -38,43 +38,21 @@ class HtmlHandler(CssHandler, JsHandler):
                         self.links.add(item.strip().split(' ')[0])
                         print('find_srcset_else_item', item)
 
-    def html_iterator(self):
-        listation = list(self.links)
-        for self.link in listation:
-            self.new_link = html.unescape(unquote(self.link))
-            if self.new_link.startswith('\\\\'):
-                self.rm_backslash()
-            if self.new_link.startswith('//'):
-                self.startsw_double_slash()
-            if '#' in self.new_link:
-                self.rm_hash()
-            if '?f=' in self.new_link:
-                result = self.rm_parameter_f()
-                if isinstance(result, set):
-                    new_link_is_set = False
-                    for link in result:
-                        if link not in listation and new_link_is_set == False:
-                            self.new_link = link
-                            new_link_is_set = True
-                        else:
-                            listation.append(link)
-                else:
-                    self.new_link = result
-            if '..' in self.new_link:
-                self.new_link = self.rm_dot_in_link()
-            if self.new_link.startswith('.'):
-                self.startsw_dot()
-                self.dict_to_type()
-            elif self.new_link.startswith('/'):
-                self.startsw_slash()
-                self.dict_to_type()
-            elif self.new_link.startswith('http'):
-                self.dict_to_type()
-            else:
-                self.starsw_other()
-                self.dict_to_type()
-
-        # self.inbound = check_type(self.inbound)
+    def get_meta(self):
+        plain_html = self.response_text
+        h = html2text.HTML2Text()
+        h.ignore_links = True
+        plain_text = h.handle(plain_html)
+        text_obj = html.fromstring(plain_html.lower())
+        try:
+            title = text_obj.xpath('//title/text()')[0].strip()
+        except Exception:
+            title = 'None'
+        try:
+            description = text_obj.xpath('//meta[@name="description"]/@content')[0].strip()
+        except Exception:
+            description = 'None'
+        return [title, description, plain_text, plain_html]
 
 
 async def worker(url):
@@ -83,25 +61,20 @@ async def worker(url):
             if url[1] == 'html':
                 html_instance = HtmlHandler()
                 if await html_instance.request_handler(response):
+                    await html_instance.write_binary('index.html')
                     html_instance.html_find_a_links()
                     html_instance.html_find_lookalike_links()
                     html_instance.html_find_srcset()
-                    html_instance.html_iterator()
-                    print('html_inbound', len(html_instance.inbound))
-                    print('html_outbound', len(html_instance.outbound))
                     # css parser
                     html_instance.css_find_links()
-                    html_instance.css_iterator()
-                    print('css_inbound', len(html_instance.inbound))
-                    print('css_outbound', len(html_instance.outbound))
                     # js parser
                     html_instance.js_find_sw_bracket_links()
                     html_instance.js_find_sw_colon_links()
                     html_instance.js_find_sw_equal_links()
                     html_instance.js_find_sw_space_links()
-                    html_instance.js_iterator()
-                    print('js_inbound', len(html_instance.inbound))
-                    print('js_outbound', len(html_instance.outbound))
+
+                    html_instance.base_iterator()
+                    html_instance.inbound = html_instance.check_type(html_instance.inbound)
                     # pprint(html.links)
                     print('****outbound****')
                     pprint(html_instance.outbound)
